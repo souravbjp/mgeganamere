@@ -55,14 +55,11 @@ def aes_cbc_encrypt_a32(data, key):
 def aes_cbc_decrypt_a32(data, key):
     return str_to_a32(aes_cbc_decrypt(a32_to_str(data), a32_to_str(key)))
 
-def stringhash(s, aeskey):
-    s32 = str_to_a32(s.encode('utf-8'))
-    h32 = [0, 0, 0, 0]
-    for i in range(len(s32)):
-        h32[i % 4] ^= s32[i]
-    for _ in range(0x4000):
-        h32 = list(aes_cbc_encrypt_a32(h32, aeskey))
-    return a32_to_base64((h32[0], h32[2]))
+def encrypt_key(a, key):
+    return sum((aes_cbc_encrypt_a32(a[i:i+4], key) for i in range(0, len(a), 4)), ())
+
+def decrypt_key(a, key):
+    return sum((aes_cbc_decrypt_a32(a[i:i+4], key) for i in range(0, len(a), 4)), ())
 
 def prepare_key(a):
     pkey = [0x93C467E3, 0x7DB0C7A4, 0xD1BE3F81, 0x0152CB56]
@@ -75,22 +72,22 @@ def prepare_key(a):
             pkey = list(aes_cbc_encrypt_a32(pkey, key))
     return pkey
 
-def encrypt_key(a, key):
-    return sum((aes_cbc_encrypt_a32(a[i:i+4], key) for i in range(0, len(a), 4)), ())
-
-def decrypt_key(a, key):
-    return sum((aes_cbc_decrypt_a32(a[i:i+4], key) for i in range(0, len(a), 4)), ())
+def stringhash(s, aeskey):
+    s32 = str_to_a32(s.encode('utf-8'))
+    h32 = [0, 0, 0, 0]
+    for i in range(len(s32)):
+        h32[i % 4] ^= s32[i]
+    for _ in range(0x4000):
+        h32 = list(aes_cbc_encrypt_a32(h32, aeskey))
+    return a32_to_base64((h32[0], h32[2]))
 
 def decrypt_attr(attr, key):
     attr = aes_cbc_decrypt(attr, a32_to_str(key))
     attr = attr.rstrip(b'\x00')
     try:
-        m = re.search(b'MEGA(.+)', attr)
-        if m:
-            return json.loads(m.group(1).decode('utf-8'))
+        return json.loads(re.search(b'MEGA(.+)', attr).group(1).decode('utf-8'))
     except Exception:
-        pass
-    return False
+        return False
 
 def encrypt_attr(attr, key):
     attr = b'MEGA' + json.dumps(attr).encode('utf-8')
@@ -112,45 +109,21 @@ class Mega:
         self.master_key   = None
         self.sequence_num = random.randint(0, 0xFFFFFFFF)
         self.session      = requests.Session()
-        self.session.headers.update({'Content-Type': 'application/json'})
 
-    def login(self, email, password):
-        email    = email.strip().lower()
-        password = password.strip()
-        self._login_user(email, password)
+    def login(self, email=None, password=None):
+        if email and password:
+            self._login_user(email.lower().strip(), password)
+        else:
+            self._login_anonymous()
         return self
 
-    def get_files(self):
-        resp = self._api_request({'a': 'f', 'c': 1, 'r': 1})
-        return self._parse_file_list(resp)
-
-    def rename(self, node, new_name):
-        key = node.get('key')
-        if not key:
-            raise Exception("Node has no key")
-        attr_key   = key[:4] if len(key) >= 4 else key
-        enc_attr   = encrypt_attr({'n': new_name}, attr_key)
-        enc_attr64 = base64_url_encode(enc_attr)
-        k_enc      = a32_to_base64(encrypt_key(key, self.master_key))
-        return self._api_request({
-            'a': 'a',
-            'attr': enc_attr64,
-            'key': k_enc,
-            'n': node['h'],
-            'i': make_id(10)
-        })
-
     def _login_user(self, email, password):
-        uh_resp = self._api_request({'a': 'us0', 'user': email})
-        if isinstance(uh_resp, int):
-            raise Exception(f"Login pre-check failed: {uh_resp}")
+        resp0 = self._api_request({'a': 'us0', 'user': email})
 
-        version = uh_resp.get('v', 1)
-
-        if version == 2:
+        if isinstance(resp0, dict) and resp0.get('v') == 2:
             import hashlib
-            salt         = base64_url_decode(uh_resp['s'])
-            dk           = hashlib.pbkdf2_hmac('sha512', password.encode('utf-8'), salt, 100000, 32)
+            salt         = base64_url_decode(resp0['s'])
+            dk           = hashlib.pbkdf2_hmac('sha512', password.encode(), salt, 100000, 32)
             password_key = str_to_a32(dk[:16])
             uh           = base64_url_encode(dk[16:])
         else:
@@ -159,65 +132,63 @@ class Mega:
 
         resp = self._api_request({'a': 'us', 'user': email, 'uh': uh})
         if isinstance(resp, int):
-            raise Exception(f"Authentication failed: {resp}")
+            raise Exception(f"Login failed, error code: {resp}")
+        self._process_login_response(resp, password_key)
 
+    def _login_anonymous(self):
+        master_key   = [random.randint(0, 0xFFFFFFFF)] * 4
+        password_key = [random.randint(0, 0xFFFFFFFF)] * 4
+        session_key  = [random.randint(0, 0xFFFFFFFF)] * 4
+        user = self._api_request({
+            'a': 'up',
+            'k': a32_to_base64(encrypt_key(master_key, password_key)),
+            'ts': base64_url_encode(
+                a32_to_str(session_key) +
+                a32_to_str(encrypt_key(session_key, master_key))
+            )
+        })
+        resp = self._api_request({'a': 'us', 'user': user})
         self._process_login_response(resp, password_key)
 
     def _process_login_response(self, resp, password_key):
-        enc_master_key  = base64_to_a32(resp['k'])
-        self.master_key = decrypt_key(enc_master_key, password_key)
+        self.master_key = decrypt_key(base64_to_a32(resp['k']), password_key)
 
         if 'tsid' in resp:
-            tsid  = base64_url_decode(resp['tsid'])
-            check = a32_to_str(encrypt_key(str_to_a32(tsid[:16]), self.master_key))
-            if check == tsid[-16:]:
+            tsid = base64_url_decode(resp['tsid'])
+            if a32_to_str(encrypt_key(str_to_a32(tsid[:16]), self.master_key)) == tsid[-16:]:
                 self.sid = resp['tsid']
-            else:
-                raise Exception("Session ID verification failed")
 
         elif 'csid' in resp:
-            enc_privk    = base64_to_a32(resp['privk'])
-            privk_a32    = decrypt_key(enc_privk, self.master_key)
-            privk_bytes  = a32_to_str(privk_a32)
-
-            components = []
-            buf = privk_bytes
+            privk_a32 = decrypt_key(base64_to_a32(resp['privk']), self.master_key)
+            buf       = a32_to_str(privk_a32)
+            comps     = []
             for _ in range(4):
                 if len(buf) < 2:
                     break
-                bit_len  = (buf[0] << 8) | buf[1]
-                byte_len = (bit_len + 7) // 8
-                val      = int.from_bytes(buf[2:2 + byte_len], 'big')
-                components.append(val)
-                buf = buf[2 + byte_len:]
+                blen = (buf[0] << 8) | buf[1]
+                blen = (blen + 7) // 8
+                comps.append(int.from_bytes(buf[2:2+blen], 'big'))
+                buf = buf[2+blen:]
 
-            if len(components) < 3:
-                raise Exception("Could not parse RSA private key")
+            if len(comps) < 3:
+                raise Exception("RSA private key parse failed")
 
-            p, q, d = components[0], components[1], components[2]
-            n   = p * q
-            e   = 65537
-            phi = (p - 1) * (q - 1)
+            p, q, d = comps[0], comps[1], comps[2]
+            n, e    = p * q, 65537
+            if (e * d) % ((p-1)*(q-1)) != 1:
+                d = pow(e, -1, (p-1)*(q-1))
 
-            # Verify d; recompute if wrong
-            if pow(e, d, phi) != 1:
-                d = pow(e, -1, phi)
-
-            rsa_key    = RSA.construct((n, e, d, p, q))
-            csid_bytes = base64_url_decode(resp['csid'])
-            enc_sid    = mpi_to_int(csid_bytes)
-            sid_int    = rsa_key._decrypt(enc_sid)
-
+            rsa     = RSA.construct((n, e, d, p, q))
+            sid_int = rsa._decrypt(mpi_to_int(base64_url_decode(resp['csid'])))
             sid_hex = format(sid_int, 'x')
             if len(sid_hex) % 2:
                 sid_hex = '0' + sid_hex
-            sid_bytes  = binascii.unhexlify(sid_hex)
-            self.sid   = base64_url_encode(sid_bytes[:43])
+            self.sid = base64_url_encode(binascii.unhexlify(sid_hex)[:43])
         else:
-            raise Exception("No session ID in login response")
+            raise Exception("No session token in login response")
 
     def _api_request(self, data):
-        params = {'id': self.sequence_num}
+        params  = {'id': self.sequence_num}
         self.sequence_num += 1
         if self.sid:
             params['sid'] = self.sid
@@ -232,6 +203,9 @@ class Mega:
                 if isinstance(resp, list):
                     resp = resp[0]
                 if isinstance(resp, int) and resp < 0:
+                    if resp == -15 and attempt < 3:
+                        time.sleep(5 * (attempt + 1))
+                        continue
                     raise Exception(f"MEGA API error: {resp}")
                 return resp
             except Exception as e:
@@ -241,6 +215,10 @@ class Mega:
                     raise
                 time.sleep(2 ** attempt)
 
+    def get_files(self):
+        resp = self._api_request({'a': 'f', 'c': 1, 'r': 1})
+        return self._parse_file_list(resp)
+
     def _parse_file_list(self, data):
         files = {}
         if not isinstance(data, dict) or 'f' not in data:
@@ -249,28 +227,35 @@ class Mega:
         for f in data['f']:
             ftype = f.get('t')
             fid   = f.get('h', '')
-
             if ftype not in (0, 1) or 'k' not in f:
                 files[fid] = f
                 continue
-
             try:
-                raw_key  = f['k'].split(':')[-1]
-                k        = base64_to_a32(raw_key)
-                k        = decrypt_key(k, self.master_key)
-
+                k = decrypt_key(base64_to_a32(f['k'].split(':')[-1]), self.master_key)
                 if ftype == 0 and len(k) >= 8:
                     file_key = (k[0]^k[4], k[1]^k[5], k[2]^k[6], k[3]^k[7])
                 else:
                     file_key = k[:4] if len(k) >= 4 else k
-
                 attr = decrypt_attr(base64_url_decode(f['a']), file_key)
                 if attr:
                     f['a']   = attr
                     f['key'] = file_key
             except Exception:
                 pass
-
             files[fid] = f
-
         return files
+
+    def rename(self, file_node, new_name):
+        if not isinstance(file_node, dict):
+            raise ValueError("file_node must be a dict from get_files()")
+        key = file_node.get('key')
+        if key is None:
+            raise Exception("File has no decrypted key")
+        enc_attr = encrypt_attr({'n': new_name}, key)
+        return self._api_request({
+            'a': 'a',
+            'attr': base64_url_encode(enc_attr),
+            'key': a32_to_base64(encrypt_key(key, self.master_key)),
+            'n': file_node['h'],
+            'i': make_id(10)
+        })
