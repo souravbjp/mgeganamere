@@ -1,5 +1,4 @@
 python-telegram-bot==20.7
-mega.py==1.0.8
+git+https://github.com/odwyerrob/mega.py.git
 pycryptodome==3.23.0
 requests==2.31.0
-tenacity==5.1.5
