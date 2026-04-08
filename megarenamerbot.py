@@ -80,23 +80,23 @@ def build_new_name(old_name: str, pattern: str, replacement: str, index: int) ->
 async def start(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     msg = (
         "🚀 *MEGA.NZ BULK RENAMER BOT*\n\n"
-        "এই bot দিয়ে Mega\\.nz এর হাজার হাজার file একসাথে rename করো\\!\n\n"
+        "এই bot দিয়ে Mega.nz এর হাজার হাজার file একসাথে rename করো!\n\n"
         "📌 *Commands:*\n"
-        "  `/login email password` — Mega\\.nz login\n"
+        "  `/login email password` — Mega.nz login\n"
         "  `/logout` — Logout\n"
         "  `/stats` — Total files count\n"
         "  `/listfolders` — Folder list দেখো\n"
         "  `/renameall` — সব file rename করো\n"
         "  `/cancel` — চলমান rename বন্ধ করো\n\n"
         "🔧 *Rename Patterns:*\n"
-        "  `prefix:MyName\\_` → সব file এর আগে যোগ করো\n"
-        "  `suffix:\\_HD` → সব file এর পরে যোগ করো\n"
+        "  `prefix:MyName_` → সব file এর আগে যোগ করো\n"
+        "  `suffix:_HD` → সব file এর পরে যোগ করো\n"
         "  `replace:old|new` → নাম replace করো\n"
         "  `regex:pattern|repl` → Regex দিয়ে rename\n"
         "  `template:{n}_{i}{ext}` → Custom template\n"
-        "  `number` → Sequential numbers \\(00001\\.mp4\\)\n"
+        "  `number` → Sequential numbers (00001.mp4)\n"
     )
-    await update.message.reply_text(msg, parse_mode="MarkdownV2")
+    await update.message.reply_text(msg, parse_mode="Markdown")
 
 
 async def login_cmd(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
@@ -383,7 +383,7 @@ async def do_bulk_rename(message, uid: int, ctx: ContextTypes.DEFAULT_TYPE):
                 bar        = "█" * bar_filled + "░" * (20 - bar_filled)
                 try:
                     await status_msg.edit_text(
-                        f"🔄 *Renaming\\.\\.\\.*\n\n"
+                        f"🔄 *Renaming...*\n\n"
                         f"`{bar}` {percent}%\n\n"
                         f"📊 Total: `{total:,}`\n"
                         f"✅ Done: `{done:,}`\n"
