@@ -4,12 +4,9 @@ import time
 import random
 import hashlib
 import os
-import sys
-import shutil
-import tempfile
 import struct
+import binascii
 import requests
-from pathlib import Path
 from Crypto.Cipher import AES
 from Crypto.PublicKey import RSA
 from Crypto.Util import Counter
@@ -209,24 +206,36 @@ class Mega:
             rsa_private_key = decrypt_key(encrypted_rsa_private_key, self.master_key)
 
             private_key = a32_to_str(rsa_private_key)
-            self.rsa_private_key = [0, 0, 0, 0]
+            rsa_components = []
 
-            for i in range(4):
-                l = ((private_key[0] * 256 + private_key[1] + 7) // 8) + 2
-                self.rsa_private_key[i] = mpi_to_int(private_key[:l])
-                private_key = private_key[l:]
+            for _ in range(4):
+                bit_length = (private_key[0] << 8) + private_key[1]
+                byte_length = (bit_length + 7) // 8
+                component = int.from_bytes(private_key[2:2 + byte_length], 'big')
+                rsa_components.append(component)
+                private_key = private_key[2 + byte_length:]
+
+            p, q, d, u = rsa_components
+            n = p * q
+
+            # e must be a valid public exponent — use standard 65537
+            e = 65537
+
+            try:
+                rsa_key = RSA.construct((n, e, d, p, q))
+            except Exception:
+                # fallback: compute d properly
+                phi = (p - 1) * (q - 1)
+                d = pow(e, -1, phi)
+                rsa_key = RSA.construct((n, e, d, p, q))
 
             encrypted_sid = mpi_to_int(base64_url_decode(resp['csid']))
-            rsa_key = RSA.construct(
-                (self.rsa_private_key[0] * self.rsa_private_key[1],
-                 0,
-                 self.rsa_private_key[2],
-                 self.rsa_private_key[0],
-                 self.rsa_private_key[1])
-            )
-            sid = '%x' % rsa_key._decrypt(encrypted_sid)
-            sid = binascii.unhexlify('0' * (len(sid) % 2) + sid)
-            self.sid = base64_url_encode(sid[:43])
+            decrypted = rsa_key._decrypt(encrypted_sid)
+            sid_hex = '%x' % decrypted
+            if len(sid_hex) % 2:
+                sid_hex = '0' + sid_hex
+            sid_bytes = binascii.unhexlify(sid_hex)
+            self.sid = base64_url_encode(sid_bytes[:43])
 
     def _api_request(self, data):
         params = {'id': self.sequence_num}
