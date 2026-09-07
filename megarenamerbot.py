@@ -10,8 +10,11 @@ import asyncio
 import re
 import os
 import threading
+import time
+import random
 from http.server import HTTPServer, BaseHTTPRequestHandler
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram.error import RetryAfter
 from telegram.ext import (
     Application, CommandHandler, MessageHandler,
     CallbackQueryHandler, ContextTypes, filters
@@ -79,7 +82,7 @@ def build_new_name(old_name: str, pattern: str, replacement: str, index: int) ->
 
 async def start(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     msg = (
-        "🚀 *MEGA.NZ BULK RENAMER BOT*\n\n"
+        "🚀 *MEGA.NZ BULK RENAMER BOT (MACH 3X)*\n\n"
         "এই bot দিয়ে Mega.nz এর হাজার হাজার file একসাথে rename করো!\n\n"
         "📌 *Commands:*\n"
         "  `/login email password` — Mega.nz login\n"
@@ -113,7 +116,6 @@ async def login_cmd(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("🔄 Mega.nz এ login হচ্ছে...")
 
     try:
-        # mega.py login is blocking — run in thread to avoid blocking event loop
         loop = asyncio.get_event_loop()
         mega = Mega()
         m = await loop.run_in_executor(None, lambda: mega.login(email, password))
@@ -332,7 +334,7 @@ async def do_bulk_rename(message, uid: int, ctx: ContextTypes.DEFAULT_TYPE):
             return
 
         status_msg = await message.reply_text(
-            f"🔄 *Rename শুরু হয়েছে!*\n\n"
+            f"🚀 *Mach 3x Rename শুরু হয়েছে!*\n\n"
             f"📊 Total Files: `{total:,}`\n"
             f"✅ Done: `0`\n"
             f"❌ Failed: `0`\n\n"
@@ -340,70 +342,71 @@ async def do_bulk_rename(message, uid: int, ctx: ContextTypes.DEFAULT_TYPE):
             parse_mode="Markdown"
         )
 
-        done        = 0
-        failed      = 0
-        UPDATE_EVERY = 50
-
+        valid_tasks = []
         for idx, (fid, node) in enumerate(files, start=1):
+            old_name = node.get("a", {}).get("n", "")
+            if not old_name:
+                continue
+            new_name = build_new_name(old_name, pattern, replacement, idx)
+            if new_name != old_name:
+                valid_tasks.append((node, new_name))
 
-            # Cancellation check
+        total_valid = len(valid_tasks)
+        done = 0
+        failed = 0
+        last_update_time = time.time()
+        
+        chunk_size = 100 
+
+        for i in range(0, total_valid, chunk_size):
             if rename_jobs.get(uid, {}).get("cancelled"):
                 await status_msg.edit_text(
                     f"🛑 *Rename বন্ধ করা হয়েছে!*\n\n"
                     f"✅ Done: `{done:,}`\n"
-                    f"❌ Failed: `{failed:,}`\n"
-                    f"⏹ Cancelled at: `{idx:,}/{total:,}`",
+                    f"❌ Failed: `{failed:,}`",
                     parse_mode="Markdown"
                 )
                 break
-
+            
+            chunk = valid_tasks[i : i + chunk_size]
             try:
-                old_name = node.get("a", {}).get("n", "")
-                if not old_name:
-                    failed += 1
-                    continue
-
-                new_name = build_new_name(old_name, pattern, replacement, idx)
-                if new_name == old_name:
-                    done += 1
-                    continue
-
-                # ✅ FIXED: mega.py rename takes the node dict, not a tuple
-                await loop.run_in_executor(None, lambda n=node, nn=new_name: m.rename(n, nn))
-                done += 1
-
+                await loop.run_in_executor(None, lambda c=chunk: m.rename_batch(c))
+                done += len(chunk)
             except Exception as e:
-                logger.error(f"Rename failed at index {idx}: {e}")
-                failed += 1
-
-            # Progress update
-            if idx % UPDATE_EVERY == 0 or idx == total:
-                percent    = int((idx / total) * 100)
+                logger.error(f"Batch failed: {e}")
+                failed += len(chunk)
+            
+            await asyncio.sleep(random.uniform(0.5, 1.5))
+            
+            current_time = time.time()
+            if (current_time - last_update_time >= 5.0) or (done + failed) == total_valid:
+                percent = int(((done + failed) / total_valid) * 100) if total_valid > 0 else 100
                 bar_filled = percent // 5
-                bar        = "█" * bar_filled + "░" * (20 - bar_filled)
+                bar = "█" * bar_filled + "░" * (20 - bar_filled)
                 try:
                     await status_msg.edit_text(
-                        f"🔄 *Renaming...*\n\n"
+                        f"🚀 *Renaming (Mach 3x Mode)...*\n\n"
                         f"`{bar}` {percent}%\n\n"
-                        f"📊 Total: `{total:,}`\n"
+                        f"📊 Total Targets: `{total_valid:,}`\n"
                         f"✅ Done: `{done:,}`\n"
-                        f"❌ Failed: `{failed:,}`\n"
-                        f"🔢 Current: `{idx:,}/{total:,}`",
+                        f"❌ Failed: `{failed:,}`",
                         parse_mode="Markdown"
                     )
+                    last_update_time = time.time()
+                except RetryAfter as e:
+                    await asyncio.sleep(e.retry_after + 1)
                 except Exception:
                     pass
 
-            await asyncio.sleep(0.5)   # Mega.nz rate-limit buffer
-
         else:
-            await status_msg.edit_text(
-                f"🎉 *Rename সম্পন্ন!*\n\n"
-                f"📊 Total Files: `{total:,}`\n"
-                f"✅ Successfully Renamed: `{done:,}`\n"
-                f"❌ Failed: `{failed:,}`",
-                parse_mode="Markdown"
-            )
+            if not rename_jobs.get(uid, {}).get("cancelled"):
+                await status_msg.edit_text(
+                    f"🎉 *Mach 3x Rename সম্পন্ন!*\n\n"
+                    f"📊 Total Files: `{total:,}`\n"
+                    f"✅ Successfully Renamed: `{done:,}`\n"
+                    f"❌ Failed: `{failed:,}`",
+                    parse_mode="Markdown"
+                )
 
     except Exception as e:
         await message.reply_text(f"❌ Critical Error: `{e}`", parse_mode="Markdown")
@@ -421,7 +424,7 @@ class HealthHandler(BaseHTTPRequestHandler):
         self.wfile.write(b"OK")
 
     def log_message(self, format, *args):
-        pass   # access log suppress করো
+        pass   
 
 
 def start_health_server():
@@ -438,7 +441,6 @@ def main():
         print("❌ BOT_TOKEN environment variable is not set!")
         return
 
-    # Health check server background এ চালাও
     threading.Thread(target=start_health_server, daemon=True).start()
 
     logger.info("🤖 Mega Renamer Bot চালু হচ্ছে...")
