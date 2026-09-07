@@ -5,6 +5,8 @@ import random
 import struct
 import binascii
 import requests
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
 from Crypto.Cipher import AES
 from Crypto.PublicKey import RSA
 
@@ -109,6 +111,17 @@ class Mega:
         self.master_key   = None
         self.sequence_num = random.randint(0, 0xFFFFFFFF)
         self.session      = requests.Session()
+        
+        user_agents = [
+            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36',
+            'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:109.0) Gecko/20100101 Firefox/115.0'
+        ]
+        self.session.headers.update({'User-Agent': random.choice(user_agents)})
+        
+        retries = Retry(total=5, backoff_factor=1, status_forcelist=[429, 500, 502, 503, 504])
+        adapter = HTTPAdapter(max_retries=retries, pool_connections=100, pool_maxsize=100)
+        self.session.mount('https://', adapter)
 
     def login(self, email=None, password=None):
         if email and password:
@@ -259,3 +272,21 @@ class Mega:
             'n': file_node['h'],
             'i': make_id(10)
         })
+
+    def rename_batch(self, rename_tasks):
+        payload = []
+        for file_node, new_name in rename_tasks:
+            key = file_node.get('key')
+            if not key:
+                continue
+            enc_attr = encrypt_attr({'n': new_name}, key)
+            req = {
+                'a': 'a',
+                'attr': base64_url_encode(enc_attr),
+                'key': a32_to_base64(encrypt_key(key, self.master_key)),
+                'n': file_node['h'],
+                'i': make_id(10)
+            }
+            payload.append(req)
+        return self._api_request(payload)
+
