@@ -38,11 +38,11 @@ def get_session(user_id):
 
 
 def all_files_recursive(m):
-    """Return flat list of all file nodes (t==0 means file)."""
+    """Return flat list of all nodes (t==0 means file, t==1 means folder)."""
     files = m.get_files()
     result = []
     for fid, node in files.items():
-        if node.get("t") == 0:
+        if node.get("t") in (0, 1): # File + Folder rename support added here
             result.append((fid, node))
     return result
 
@@ -155,7 +155,7 @@ async def stats_cmd(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         total = len(files)
         await update.message.reply_text(
             f"📊 *Mega.nz Stats*\n\n"
-            f"📁 Total Files: `{total:,}`\n"
+            f"📁 Total Files & Folders: `{total:,}`\n"
             f"📧 Account: `{sess['email']}`",
             parse_mode="Markdown"
         )
@@ -226,10 +226,10 @@ async def button_handler(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         ctx.user_data["rename_pattern"] = pattern
 
         prompts = {
-            "number":   ("🔢 সব file কে `00001.ext`, `00002.ext` ... এভাবে rename করা হবে।\n\n"
+            "number":   ("🔢 সব file/folder কে `00001.ext`, `00002.ext` ... এভাবে rename করা হবে।\n\n"
                          "শুরু করতে `/startrenaming` দাও।", False),
             "prefix":   ("✏️ Prefix টাইপ করো:\n\nExample: `Movie_2024_`\n\n"
-                         "_(এই text সব file এর নামের আগে যোগ হবে)_", True),
+                         "_(এই text সব file/folder এর নামের আগে যোগ হবে)_", True),
             "suffix":   ("✏️ Suffix টাইপ করো:\n\nExample: `_HD`\n\n"
                          "_(Extension এর আগে যোগ হবে)_", True),
             "replace":  ("✏️ Format: `পুরনো_text|নতুন_text`\n\nExample: `Episode|EP`", True),
@@ -281,7 +281,7 @@ async def message_handler(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         f"👁 *Preview:*\n\n"
         f"📄 আগে: `{example_old}`\n"
         f"📄 পরে: `{example_new}`\n\n"
-        f"সব file এই নিয়মে rename হবে। নিশ্চিত?",
+        f"সব file/folder এই নিয়মে rename হবে। নিশ্চিত?",
         reply_markup=InlineKeyboardMarkup(keyboard),
         parse_mode="Markdown"
     )
@@ -330,12 +330,12 @@ async def do_bulk_rename(message, uid: int, ctx: ContextTypes.DEFAULT_TYPE):
         total = len(files)
 
         if total == 0:
-            await message.reply_text("📂 কোনো file পাওয়া যায়নি।")
+            await message.reply_text("📂 কোনো file/folder পাওয়া যায়নি।")
             return
 
         status_msg = await message.reply_text(
             f"🚀 *Mach 3x Rename শুরু হয়েছে!*\n\n"
-            f"📊 Total Files: `{total:,}`\n"
+            f"📊 Total Targets: `{total:,}`\n"
             f"✅ Done: `0`\n"
             f"❌ Failed: `0`\n\n"
             f"_/cancel দিয়ে বন্ধ করতে পারো_",
@@ -402,7 +402,7 @@ async def do_bulk_rename(message, uid: int, ctx: ContextTypes.DEFAULT_TYPE):
             if not rename_jobs.get(uid, {}).get("cancelled"):
                 await status_msg.edit_text(
                     f"🎉 *Mach 3x Rename সম্পন্ন!*\n\n"
-                    f"📊 Total Files: `{total:,}`\n"
+                    f"📊 Total Targets: `{total:,}`\n"
                     f"✅ Successfully Renamed: `{done:,}`\n"
                     f"❌ Failed: `{failed:,}`",
                     parse_mode="Markdown"
