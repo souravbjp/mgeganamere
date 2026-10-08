@@ -2,3 +2,4 @@ kurigram
 pycryptodome
 curl_cffi
 motor
+tgcrypto
