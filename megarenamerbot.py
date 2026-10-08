@@ -35,9 +35,9 @@ logger = logging.getLogger(__name__)
 
 # ENV Variables required for MTProto
 BOT_TOKEN = os.environ.get("BOT_TOKEN", "")
-API_ID = int(os.environ.get("API_ID", "0"))      # ⚠️ MUST ADD API_ID
-API_HASH = os.environ.get("API_HASH", "")        # ⚠️ MUST ADD API_HASH
-MONGO_URL = os.environ.get("MONGO_URL", "mongodb+srv://vsigsiehvdidod_db_user:LZuzYqhzdiehcHOB@cluster0.6dolbi0.mongodb.net/?appName=Cluster0")
+API_ID = int(os.environ.get("API_ID", "0"))      
+API_HASH = os.environ.get("API_HASH", "")        
+MONGO_URL = os.environ.get("MONGO_URL", "")
 
 db = None
 if MONGO_URL:
@@ -57,7 +57,7 @@ app = Client(
 
 user_sessions = {}
 rename_jobs = {}
-user_states = {} # Replaces PTB user_data for dynamic state management
+user_states = {} 
 
 def get_session(user_id):
     return user_sessions.get(user_id)
@@ -66,7 +66,7 @@ def all_files_recursive(m):
     files = m.get_files()
     result = []
     for fid, node in files.items():
-        if node.get("t") in (0, 1): # File + Folder rename support
+        if node.get("t") in (0, 1): 
             result.append((fid, node))
     return result
 
@@ -124,7 +124,6 @@ async def start_cmd(client, message):
         "  `number` → Sequential numbers (00001.mp4)\n"
     )
     
-    # 🌟 Enterprise Deep Link Auth UI
     keyboard = InlineKeyboardMarkup([
         [InlineKeyboardButton("🌐 WebApp Theke Login Koro", web_app=WebAppInfo(url="https://telegram.org"))], 
         [InlineKeyboardButton("👨‍💻 Command Diye Login", callback_data="cmd_login_help")]
@@ -379,7 +378,8 @@ async def do_bulk_rename(message, uid: int):
         failed = 0
         last_update_time = time.time()
         
-        chunk_size = 15 # Parallel chunk size for best anti-ban speed
+        # 🛡️ 20 is optimal. Batching prevents Mega API -15 Error
+        chunk_size = 20 
 
         for i in range(0, total_valid, chunk_size):
             if rename_jobs.get(uid, {}).get("cancelled"):
@@ -392,12 +392,8 @@ async def do_bulk_rename(message, uid: int):
             
             chunk = valid_tasks[i : i + chunk_size]
             try:
-                # Parallel Asynchronous Execution (Mach 3x Speed)
-                tasks = []
-                for node, new_name in chunk:
-                    tasks.append(loop.run_in_executor(None, lambda n=node, nn=new_name: m.rename(n, nn)))
-                
-                await asyncio.gather(*tasks)
+                # 🚀 Batched execution prevents sequence ID collision
+                await loop.run_in_executor(None, lambda c=chunk: m.rename_batch(c))
                 done += len(chunk)
                 
                 # 💾 MongoDB Auto Save Resume Progress
@@ -405,7 +401,7 @@ async def do_bulk_rename(message, uid: int):
                     await db.resume_progress.update_one({"uid": uid}, {"$set": {"done": done, "total": total_valid}}, upsert=True)
                     
             except Exception as e:
-                logger.error(f"Parallel Batch failed: {e}")
+                logger.error(f"Batch failed: {e}")
                 failed += len(chunk)
             
             # Anti-ban Jitter Delay 
@@ -419,7 +415,7 @@ async def do_bulk_rename(message, uid: int):
                 bar = "█" * bar_filled + "░" * (20 - bar_filled)
                 try:
                     await status_msg.edit_text(
-                        f"🚀 *Renaming (Parallel Mode)...*\n\n"
+                        f"🚀 *Renaming (Batch Mode)...*\n\n"
                         f"`{bar}` {percent}%\n\n"
                         f"📊 Total Targets: `{total_valid:,}`\n"
                         f"✅ Done: `{done:,}`\n"
@@ -427,7 +423,6 @@ async def do_bulk_rename(message, uid: int):
                     )
                     last_update_time = time.time()
                 except FloodWait as e:
-                    # Built-in FloodWait MTProto handler
                     await asyncio.sleep(e.value + 1)
                 except Exception:
                     pass
@@ -448,7 +443,11 @@ async def do_bulk_rename(message, uid: int):
         if uid in user_states:
             del user_states[uid]
         if db is not None:
-             asyncio.create_task(db.resume_progress.delete_one({"uid": uid}))
+             try:
+                 # 🔧 FIXED: motor requires await, not create_task
+                 await db.resume_progress.delete_one({"uid": uid}) 
+             except Exception:
+                 pass
 
 
 # ─── HEALTH CHECK SERVER (Koyeb এর জন্য) ────────────────────────
