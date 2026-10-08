@@ -48,11 +48,13 @@ if MONGO_URL:
     except Exception as e:
         logger.warning(f"MongoDB connection failed: {e}")
 
+# 🛡️ in_memory=True prevents SQLite locked/read-only errors on Koyeb
 app = Client(
     "mega_enterprise_bot",
     api_id=API_ID,
     api_hash=API_HASH,
-    bot_token=BOT_TOKEN
+    bot_token=BOT_TOKEN,
+    in_memory=True
 )
 
 user_sessions = {}
@@ -144,7 +146,7 @@ async def login_cmd(client, message):
     wait_msg = await message.reply_text("🔄 Mega.nz এ login হচ্ছে...")
 
     try:
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         mega = Mega()
         m = await loop.run_in_executor(None, lambda: mega.login(email, password))
         user_sessions[uid] = {"mega": mega, "m": m, "email": email}
@@ -173,7 +175,7 @@ async def stats_cmd(client, message):
 
     wait_msg = await message.reply_text("🔄 File count করা হচ্ছে...")
     try:
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         files = await loop.run_in_executor(None, lambda: all_files_recursive(sess["m"]))
         total = len(files)
         await wait_msg.edit_text(
@@ -195,7 +197,7 @@ async def listfolders_cmd(client, message):
 
     wait_msg = await message.reply_text("🔄 Fetching folders...")
     try:
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         all_nodes = await loop.run_in_executor(None, sess["m"].get_files)
         folders = [
             (fid, n) for fid, n in all_nodes.items()
@@ -348,7 +350,7 @@ async def do_bulk_rename(message, uid: int):
     rename_jobs[uid] = {"running": True, "cancelled": False}
 
     try:
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         files = await loop.run_in_executor(None, lambda: all_files_recursive(m))
         total = len(files)
 
@@ -446,8 +448,8 @@ async def do_bulk_rename(message, uid: int):
              try:
                  # 🔧 FIXED: motor requires await, not create_task
                  await db.resume_progress.delete_one({"uid": uid}) 
-             except Exception:
-                 pass
+             except Exception as e:
+                 logger.error(f"DB Error on complete: {e}")
 
 
 # ─── HEALTH CHECK SERVER (Koyeb এর জন্য) ────────────────────────
