@@ -84,7 +84,10 @@ def decrypt_attr(attr, key):
     attr = aes_cbc_decrypt(attr, a32_to_str(key))
     attr = attr.rstrip(b'\x00')
     try:
-        return json.loads(re.search(b'MEGA(.+)', attr).group(1).decode('utf-8'))
+        match = re.search(b'MEGA(.+)', attr)
+        if match:
+            return json.loads(match.group(1).decode('utf-8'))
+        return False
     except Exception:
         return False
 
@@ -107,9 +110,7 @@ class Mega:
         self.sid          = None
         self.master_key   = None
         self.sequence_num = random.randint(0, 0xFFFFFFFF)
-        
-        # 🛡️ Anti-Ban (JA3 / TLS Fingerprint Spoofing)
-        self.session = requests.Session(impersonate="chrome110")
+        self.session      = requests.Session(impersonate="chrome110")
 
     def login(self, email=None, password=None):
         if email and password:
@@ -136,6 +137,11 @@ class Mega:
             raise Exception(f"Login failed, error code: {resp}")
         self._process_login_response(resp, password_key)
 
+        # সেশন কার্যকর কি না সাথে সাথে ভেরিফাই করা হচ্ছে
+        verify = self._api_request({'a': 'ug'})
+        if isinstance(verify, int) and verify < 0:
+            raise Exception(f"Session verification failed (code {verify})")
+
     def _login_anonymous(self):
         master_key   = [random.randint(0, 0xFFFFFFFF)] * 4
         password_key = [random.randint(0, 0xFFFFFFFF)] * 4
@@ -156,8 +162,8 @@ class Mega:
 
         if 'tsid' in resp:
             tsid = base64_url_decode(resp['tsid'])
-            if a32_to_str(encrypt_key(str_to_a32(tsid[:16]), self.master_key)) == tsid[-16:]:
-                self.sid = resp['tsid']
+            # শুধুমাত্র প্রথম ১৬ বাইট হলো আসল Session Key
+            self.sid = base64_url_encode(tsid[:16])
 
         elif 'csid' in resp:
             privk_a32 = decrypt_key(base64_to_a32(resp['privk']), self.master_key)
@@ -184,12 +190,18 @@ class Mega:
             sid_hex = format(sid_int, 'x')
             if len(sid_hex) % 2:
                 sid_hex = '0' + sid_hex
-            self.sid = base64_url_encode(binascii.unhexlify(sid_hex)[:43])
+            sid_raw = binascii.unhexlify(sid_hex)
+
+            # ডাবল বেস৬৪ এনকোডিং প্রতিরোধ
+            if len(sid_raw) >= 43 and all(32 <= b <= 126 for b in sid_raw[:43]):
+                self.sid = sid_raw[:43].decode('ascii')
+            else:
+                self.sid = base64_url_encode(sid_raw[:43])
         else:
             raise Exception("No session token in login response")
 
     def _api_request(self, data):
-        params  = {'id': self.sequence_num}
+        params = {'id': self.sequence_num}
         self.sequence_num += 1
         if self.sid:
             params['sid'] = self.sid
@@ -204,9 +216,6 @@ class Mega:
                 if isinstance(resp, list):
                     resp = resp[0]
                 if isinstance(resp, int) and resp < 0:
-                    if resp == -15 and attempt < 3:
-                        time.sleep(5 * (attempt + 1))
-                        continue
                     raise Exception(f"MEGA API error: {resp}")
                 return resp
             except Exception as e:
@@ -253,10 +262,12 @@ class Mega:
         if key is None:
             raise Exception("File has no decrypted key")
         enc_attr = encrypt_attr({'n': new_name}, key)
+        b64_attr = base64_url_encode(enc_attr)
+        
+        # 'at' ফিল্ড দেওয়া হয়েছে Mega API নিয়ম অনুযায়ী
         return self._api_request({
             'a': 'a',
-            'attr': base64_url_encode(enc_attr),
-            'key': a32_to_base64(encrypt_key(key, self.master_key)),
             'n': file_node['h'],
+            'at': b64_attr,
             'i': make_id(10)
         })
