@@ -1,8 +1,8 @@
 """
 ==============================================
-  MEGA.NZ TELEGRAM RENAMER BOT (MTProto Version)
+  MEGA.NZ TELEGRAM RENAMER BOT (Premium UI)
   Powered by Kurigram / Pyrogram
-  By: Claude | Safe Enterprise Architecture
+  By: Claude | Safe & Advanced Architecture
 ==============================================
 """
 
@@ -16,12 +16,12 @@ import random
 from http.server import HTTPServer, BaseHTTPRequestHandler
 from mega import Mega
 
-# 🚀 MTProto Core (Kurigram / Pyrogram)
-from pyrogram import Client, filters
+# 🚀 MTProto Core
+from pyrogram import Client, filters, enums
 from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton, WebAppInfo
 from pyrogram.errors import FloodWait
 
-# 🌐 Enterprise Database Auto-Resume System
+# 🌐 Enterprise Database Auto-Resume
 try:
     import motor.motor_asyncio
 except ImportError:
@@ -33,7 +33,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# ENV Variables required for MTProto
+# ENV Variables
 BOT_TOKEN = os.environ.get("BOT_TOKEN", "")
 API_ID = int(os.environ.get("API_ID", "0"))      
 API_HASH = os.environ.get("API_HASH", "")        
@@ -48,7 +48,7 @@ if MONGO_URL:
     except Exception as e:
         logger.warning(f"MongoDB connection failed: {e}")
 
-# 🛡️ in_memory=True prevents SQLite locked/read-only errors on Koyeb
+# 🛡️ in_memory=True prevents Koyeb SQLite crashes
 app = Client(
     "mega_enterprise_bot",
     api_id=API_ID,
@@ -108,29 +108,28 @@ def build_new_name(old_name: str, pattern: str, replacement: str, index: int) ->
 @app.on_message(filters.command("start") & filters.private)
 async def start_cmd(client, message):
     msg = (
-        "🚀 *MEGA.NZ BULK RENAMER BOT (SAFE MODE)*\n\n"
-        "এই bot দিয়ে Mega.nz এর হাজার হাজার file একসাথে rename করো!\n\n"
-        "📌 *Commands:*\n"
-        "  `/login email password` — Mega.nz login\n"
-        "  `/logout` — Logout\n"
-        "  `/stats` — Total files count\n"
-        "  `/listfolders` — Folder list দেখো\n"
-        "  `/renameall` — সব file rename করো\n"
-        "  `/cancel` — চলমান rename বন্ধ করো\n\n"
-        "🔧 *Rename Patterns:*\n"
-        "  `prefix:MyName_` → সব file এর আগে যোগ করো\n"
-        "  `suffix:_HD` → সব file এর পরে যোগ করো\n"
-        "  `replace:old|new` → নাম replace করো\n"
-        "  `regex:pattern|repl` → Regex দিয়ে rename\n"
-        "  `template:{n}_{i}{ext}` → Custom template\n"
-        "  `number` → Sequential numbers (00001.mp4)\n"
+        "🚀 <b>MEGA.NZ BULK RENAMER BOT</b>\n\n"
+        "<blockquote>🛡️ <b>Safe & Secure Mode Active</b>\n"
+        "Mega-r firewall theke 100% block-free, file r folder eki sathe rename korun smooth vabe.</blockquote>\n\n"
+        "<b>📌 Commands:</b>\n"
+        "  <code>/login email password</code> — Login koro\n"
+        "  <code>/logout</code> — Account theke ber how\n"
+        "  <code>/stats</code> — Mega stats check\n"
+        "  <code>/listfolders</code> — Folder gulo dekho\n"
+        "  <code>/renameall</code> — Rename engine start\n"
+        "  <code>/cancel</code> — Running task stop\n\n"
+        "<b>🔧 Features:</b>\n"
+        "<blockquote>• Prefix, Suffix, Replace\n"
+        "• Regex Support, Custom Template\n"
+        "• Auto Resume (MongoDB)\n"
+        "• Deep Link WebApp Interface</blockquote>"
     )
     
     keyboard = InlineKeyboardMarkup([
-        [InlineKeyboardButton("🌐 WebApp Theke Login Koro", web_app=WebAppInfo(url="https://telegram.org"))], 
-        [InlineKeyboardButton("👨‍💻 Command Diye Login", callback_data="cmd_login_help")]
+        [InlineKeyboardButton("🌐 WebApp Dashboard", web_app=WebAppInfo(url="https://megarenamer.vercel.app"))], 
+        [InlineKeyboardButton("👨‍💻 Command Help", callback_data="cmd_login_help")]
     ])
-    await message.reply_text(msg, reply_markup=keyboard)
+    await message.reply_text(msg, parse_mode=enums.ParseMode.HTML, reply_markup=keyboard)
 
 
 @app.on_message(filters.command("login") & filters.private)
@@ -139,20 +138,32 @@ async def login_cmd(client, message):
     args = message.command[1:]
 
     if len(args) < 2:
-        await message.reply_text("❌ Usage: `/login email password`")
+        await message.reply_text(
+            "❌ <b>Error:</b>\n<blockquote>Sothik vabe command din:\n<code>/login example@email.com password</code></blockquote>",
+            parse_mode=enums.ParseMode.HTML
+        )
         return
 
     email, password = args[0], args[1]
-    wait_msg = await message.reply_text("🔄 Mega.nz এ login হচ্ছে...")
+    wait_msg = await message.reply_text("🔄 <b>Mega.nz e login hocche...</b>", parse_mode=enums.ParseMode.HTML)
 
     try:
         loop = asyncio.get_running_loop()
         mega = Mega()
         m = await loop.run_in_executor(None, lambda: mega.login(email, password))
         user_sessions[uid] = {"mega": mega, "m": m, "email": email}
-        await wait_msg.edit_text(f"✅ *Login সফল!*\n📧 {email}\n\nএখন `/stats` দিয়ে file count দেখো।")
+        await wait_msg.edit_text(
+            f"✅ <b>Login Successful!</b>\n\n"
+            f"<blockquote>📧 <b>Account:</b> <code>{email}</code>\n"
+            f"🔑 <b>Status:</b> Authorized & Secured</blockquote>\n"
+            f"Ekhon <code>/stats</code> diye file count dekhte paro.",
+            parse_mode=enums.ParseMode.HTML
+        )
     except Exception as e:
-        await wait_msg.edit_text(f"❌ Login ব্যর্থ!\nError: `{e}`")
+        await wait_msg.edit_text(
+            f"❌ <b>Login Failed!</b>\n<blockquote>Error: {e}</blockquote>", 
+            parse_mode=enums.ParseMode.HTML
+        )
 
 
 @app.on_message(filters.command("logout") & filters.private)
@@ -160,9 +171,9 @@ async def logout_cmd(client, message):
     uid = message.from_user.id
     if uid in user_sessions:
         del user_sessions[uid]
-        await message.reply_text("✅ Logout হয়ে গেছে।")
+        await message.reply_text("✅ <b>Logout complete. Session cleared.</b>", parse_mode=enums.ParseMode.HTML)
     else:
-        await message.reply_text("⚠️ আপনি login করেননি।")
+        await message.reply_text("⚠️ <b>Tumi to login-i koroni!</b>", parse_mode=enums.ParseMode.HTML)
 
 
 @app.on_message(filters.command("stats") & filters.private)
@@ -170,21 +181,22 @@ async def stats_cmd(client, message):
     uid = message.from_user.id
     sess = get_session(uid)
     if not sess:
-        await message.reply_text("❌ আগে `/login email password` করো।")
+        await message.reply_text("❌ <b>Age /login koro.</b>", parse_mode=enums.ParseMode.HTML)
         return
 
-    wait_msg = await message.reply_text("🔄 File count করা হচ্ছে...")
+    wait_msg = await message.reply_text("🔄 <b>Fetching files and folders...</b>", parse_mode=enums.ParseMode.HTML)
     try:
         loop = asyncio.get_running_loop()
         files = await loop.run_in_executor(None, lambda: all_files_recursive(sess["m"]))
         total = len(files)
         await wait_msg.edit_text(
-            f"📊 *Mega.nz Stats*\n\n"
-            f"📁 Total Files & Folders: `{total:,}`\n"
-            f"📧 Account: `{sess['email']}`"
+            f"📊 <b>Mega.nz Live Stats</b>\n\n"
+            f"<blockquote>📁 <b>Total Files & Folders:</b> <code>{total:,}</code>\n"
+            f"📧 <b>Account connected:</b> <code>{sess['email']}</code></blockquote>",
+            parse_mode=enums.ParseMode.HTML
         )
     except Exception as e:
-        await wait_msg.edit_text(f"❌ Error: `{e}`")
+        await wait_msg.edit_text(f"❌ <b>Error:</b> <code>{e}</code>", parse_mode=enums.ParseMode.HTML)
 
 
 @app.on_message(filters.command("listfolders") & filters.private)
@@ -192,10 +204,10 @@ async def listfolders_cmd(client, message):
     uid = message.from_user.id
     sess = get_session(uid)
     if not sess:
-        await message.reply_text("❌ আগে `/login` করো।")
+        await message.reply_text("❌ <b>Age /login koro.</b>", parse_mode=enums.ParseMode.HTML)
         return
 
-    wait_msg = await message.reply_text("🔄 Fetching folders...")
+    wait_msg = await message.reply_text("🔄 <b>Checking Mega structure...</b>", parse_mode=enums.ParseMode.HTML)
     try:
         loop = asyncio.get_running_loop()
         all_nodes = await loop.run_in_executor(None, sess["m"].get_files)
@@ -204,20 +216,21 @@ async def listfolders_cmd(client, message):
             if n.get("t") == 1 and n.get("a")
         ]
         if not folders:
-            await wait_msg.edit_text("📂 কোনো folder পাওয়া যায়নি।")
+            await wait_msg.edit_text("📂 <b>Kono folder pawa jayni.</b>", parse_mode=enums.ParseMode.HTML)
             return
 
-        lines = ["📂 *Folder List:*\n"]
+        lines = ["📂 <b>Root Folders:</b>\n<blockquote>"]
         for fid, node in folders[:50]:
             name = node.get("a", {}).get("n", "Unknown")
-            lines.append(f"• `{name}`")
+            lines.append(f"• <code>{name}</code>")
 
         if len(folders) > 50:
-            lines.append(f"\n_...এবং আরো {len(folders)-50}টি folder_")
+            lines.append(f"\n<i>...plus {len(folders)-50} more folders</i>")
+        lines.append("</blockquote>")
 
-        await wait_msg.edit_text("\n".join(lines))
+        await wait_msg.edit_text("\n".join(lines), parse_mode=enums.ParseMode.HTML)
     except Exception as e:
-        await wait_msg.edit_text(f"❌ Error: `{e}`")
+        await wait_msg.edit_text(f"❌ <b>Error:</b> <code>{e}</code>", parse_mode=enums.ParseMode.HTML)
 
 
 @app.on_message(filters.command("renameall") & filters.private)
@@ -225,18 +238,20 @@ async def renameall_cmd(client, message):
     uid = message.from_user.id
     sess = get_session(uid)
     if not sess:
-        await message.reply_text("❌ আগে `/login` করো।")
+        await message.reply_text("❌ <b>Age /login koro.</b>", parse_mode=enums.ParseMode.HTML)
         return
 
     keyboard = InlineKeyboardMarkup([
-        [InlineKeyboardButton("🔤 Prefix যোগ করো",    callback_data="pattern_prefix")],
-        [InlineKeyboardButton("🔡 Suffix যোগ করো",    callback_data="pattern_suffix")],
-        [InlineKeyboardButton("🔄 Text Replace",       callback_data="pattern_replace")],
-        [InlineKeyboardButton("🔢 Sequential Numbers", callback_data="pattern_number")],
-        [InlineKeyboardButton("🛠 Regex Replace",      callback_data="pattern_regex")],
-        [InlineKeyboardButton("📝 Custom Template",    callback_data="pattern_template")]
+        [InlineKeyboardButton("🔤 Prefix", callback_data="pattern_prefix"), InlineKeyboardButton("🔡 Suffix", callback_data="pattern_suffix")],
+        [InlineKeyboardButton("🔄 Replace", callback_data="pattern_replace"), InlineKeyboardButton("🔢 Number", callback_data="pattern_number")],
+        [InlineKeyboardButton("🛠 Regex", callback_data="pattern_regex"), InlineKeyboardButton("📝 Template", callback_data="pattern_template")]
     ])
-    await message.reply_text("🎯 *কোন ধরনের Rename করতে চাও?*", reply_markup=keyboard)
+    await message.reply_text(
+        "🎯 <b>Select Rename Method:</b>\n"
+        "<blockquote>Kon dhoroner naming pattern apply korte chao? Niche theke select koro:</blockquote>",
+        reply_markup=keyboard,
+        parse_mode=enums.ParseMode.HTML
+    )
 
 
 @app.on_callback_query()
@@ -245,7 +260,7 @@ async def callback_handler(client, query):
     data = query.data
 
     if data == "cmd_login_help":
-        await query.answer("Example: /login email password", show_alert=True)
+        await query.answer("Type: /login your_email your_password", show_alert=True)
         return
 
     if data.startswith("pattern_"):
@@ -256,26 +271,26 @@ async def callback_handler(client, query):
         user_states[uid]["rename_pattern"] = pattern
 
         prompts = {
-            "number":   ("🔢 সব file/folder কে `00001.ext`, `00002.ext` ... এভাবে rename করা হবে।\n\nশুরু করতে `/startrenaming` দাও।", False),
-            "prefix":   ("✏️ Prefix টাইপ করো:\n\nExample: `Movie_2024_`\n\n_(এই text সব file/folder এর নামের আগে যোগ হবে)_", True),
-            "suffix":   ("✏️ Suffix টাইপ করো:\n\nExample: `_HD`\n\n_(Extension এর আগে যোগ হবে)_", True),
-            "replace":  ("✏️ Format: `পুরনো_text|নতুন_text`\n\nExample: `Episode|EP`", True),
-            "regex":    ("✏️ Regex Format: `pattern|replacement`\n\nExample: `\\s+|_` (space কে underscore করবে)", True),
-            "template": ("✏️ Template লেখো:\n\n`{n}` = original name\n`{i}` = index number\n`{ext}` = extension\n\nExample: `Series_{i}_{n}{ext}`", True),
+            "number":   ("🔢 <b>Sequential Numbers Set</b>\n<blockquote>Sob file <code>00001.ext</code>, <code>00002.ext</code> evabe hobe.\nStart korte <code>/startrenaming</code> daw.</blockquote>", False),
+            "prefix":   ("✏️ <b>Prefix Input:</b>\n<blockquote>Je text ta likhbe seta proyojoniyo sob file er ekdom shurute jog hobe.\nExample: <code>Movie_2024_</code></blockquote>", True),
+            "suffix":   ("✏️ <b>Suffix Input:</b>\n<blockquote>Je text ta likhbe seta extention er thik age jog hobe.\nExample: <code>_HD</code></blockquote>", True),
+            "replace":  ("✏️ <b>Text Replace Input:</b>\n<blockquote>Format: <code>old_word|new_word</code>\nExample: <code>Episode|EP</code></blockquote>", True),
+            "regex":    ("✏️ <b>Regex Replace Input:</b>\n<blockquote>Format: <code>pattern|replacement</code>\nExample: <code>\s+|_</code> (space hobe underscore)</blockquote>", True),
+            "template": ("✏️ <b>Template Input:</b>\n<blockquote><code>{n}</code> = Original Name\n<code>{i}</code> = Index No\n<code>{ext}</code> = Extension\nExample: <code>Series_{i}_{n}{ext}</code></blockquote>", True),
         }
-        text, needs_input = prompts.get(pattern, ("Unknown pattern", False))
+        text, needs_input = prompts.get(pattern, ("Unknown", False))
         user_states[uid]["awaiting_input"] = needs_input
         if needs_input:
             user_states[uid]["rename_replacement"] = ""
             
-        await query.message.edit_text(text)
+        await query.message.edit_text(text, parse_mode=enums.ParseMode.HTML)
 
     elif data == "confirm_rename":
-        await query.message.edit_text("🚀 Rename শুরু হচ্ছে...")
+        await query.message.edit_text("🚀 <b>Initialize hocche...</b>", parse_mode=enums.ParseMode.HTML)
         await do_bulk_rename(query.message, uid)
 
     elif data == "cancel_rename":
-        await query.message.edit_text("❌ Rename বাতিল করা হয়েছে।")
+        await query.message.edit_text("❌ <b>Rename canceled by user.</b>", parse_mode=enums.ParseMode.HTML)
         if uid in user_states:
             del user_states[uid]
 
@@ -298,16 +313,17 @@ async def message_handler(client, message):
 
     keyboard = InlineKeyboardMarkup([
         [
-            InlineKeyboardButton("✅ শুরু করো!", callback_data="confirm_rename"),
-            InlineKeyboardButton("❌ বাতিল",     callback_data="cancel_rename"),
+            InlineKeyboardButton("✅ Start Rename", callback_data="confirm_rename"),
+            InlineKeyboardButton("❌ Cancel", callback_data="cancel_rename"),
         ]
     ])
     await message.reply_text(
-        f"👁 *Preview:*\n\n"
-        f"📄 আগে: `{example_old}`\n"
-        f"📄 পরে: `{example_new}`\n\n"
-        f"সব file/folder এই নিয়মে rename হবে। নিশ্চিত?",
-        reply_markup=keyboard
+        f"👁 <b>Live Preview Generated:</b>\n\n"
+        f"<blockquote><b>📄 Old Name:</b> <code>{example_old}</code>\n"
+        f"<b>📄 New Name:</b> <code>{example_new}</code></blockquote>\n\n"
+        f"<i>Ei niyome sob file change hobe. Tumi ki nischit?</i>",
+        reply_markup=keyboard,
+        parse_mode=enums.ParseMode.HTML
     )
 
 
@@ -318,10 +334,10 @@ async def startrenaming_cmd(client, message):
     
     if state.get("rename_pattern") == "number":
         user_states[uid]["rename_replacement"] = ""
-        await message.reply_text("🚀 Rename শুরু হচ্ছে...")
+        await message.reply_text("🚀 <b>Processing started...</b>", parse_mode=enums.ParseMode.HTML)
         await do_bulk_rename(message, uid)
     else:
-        await message.reply_text("⚠️ আগে `/renameall` দিয়ে pattern সেট করো।")
+        await message.reply_text("⚠️ <b>Error:</b> Age <code>/renameall</code> diye pattern set koro.", parse_mode=enums.ParseMode.HTML)
 
 
 @app.on_message(filters.command("cancel") & filters.private)
@@ -329,17 +345,17 @@ async def cancel_cmd(client, message):
     uid = message.from_user.id
     if uid in rename_jobs:
         rename_jobs[uid]["cancelled"] = True
-        await message.reply_text("🛑 Rename job বন্ধ করার request পাঠানো হয়েছে...")
+        await message.reply_text("🛑 <b>Cancel command received! Processing will stop in a few seconds...</b>", parse_mode=enums.ParseMode.HTML)
     else:
-        await message.reply_text("⚠️ কোনো চলমান job নেই।")
+        await message.reply_text("⚠️ <b>No active jobs found.</b>", parse_mode=enums.ParseMode.HTML)
 
 
-# ─── BULK RENAME ENGINE (Original Safe Architecture) ───────────────────────────────────────────
+# ─── BULK RENAME ENGINE (Safe 1-by-1 Architecture) ───────────────────────────────────────────
 
 async def do_bulk_rename(message, uid: int):
     sess = get_session(uid)
     if not sess:
-        await message.reply_text("❌ Session শেষ হয়ে গেছে। আবার `/login` করো।")
+        await message.reply_text("❌ <b>Session timeout! Abar login koro.</b>", parse_mode=enums.ParseMode.HTML)
         return
 
     state = user_states.get(uid, {})
@@ -355,15 +371,13 @@ async def do_bulk_rename(message, uid: int):
         total = len(files)
 
         if total == 0:
-            await message.reply_text("📂 কোনো file/folder পাওয়া যায়নি।")
+            await message.reply_text("📂 <b>Kono valid file/folder pawa jayni.</b>", parse_mode=enums.ParseMode.HTML)
             return
 
         status_msg = await message.reply_text(
-            f"🚀 *Rename শুরু হয়েছে!*\n\n"
-            f"📊 Total Targets: `{total:,}`\n"
-            f"✅ Done: `0`\n"
-            f"❌ Failed: `0`\n\n"
-            f"_/cancel দিয়ে বন্ধ করতে পারো_"
+            f"🚀 <b>Rename Initializing (Safe Mode)...</b>\n"
+            f"<blockquote>📊 Total Targets: <code>{total:,}</code></blockquote>",
+            parse_mode=enums.ParseMode.HTML
         )
 
         valid_tasks = []
@@ -380,45 +394,48 @@ async def do_bulk_rename(message, uid: int):
         failed = 0
         last_update_time = time.time()
 
-        # 🛡️ 100% Safe Original Logic (Sequential) - No Batching
+        # 🛡️ 100% Safe Sequential Logic
         for idx, (node, new_name) in enumerate(valid_tasks, start=1):
             if rename_jobs.get(uid, {}).get("cancelled"):
                 await status_msg.edit_text(
-                    f"🛑 *Rename বন্ধ করা হয়েছে!*\n\n"
-                    f"✅ Done: `{done:,}`\n"
-                    f"❌ Failed: `{failed:,}`"
+                    f"🛑 <b>Rename Aborted by User!</b>\n\n"
+                    f"<blockquote>✅ <b>Successful:</b> <code>{done:,}</code>\n"
+                    f"❌ <b>Failed:</b> <code>{failed:,}</code></blockquote>",
+                    parse_mode=enums.ParseMode.HTML
                 )
                 break
             
             try:
-                # 🚀 1 by 1 Execution (Prevents Mega API -15 Error entirely)
+                # 1 by 1 execution -> ZERO -15 Mega Error
                 await loop.run_in_executor(None, lambda n=node, nn=new_name: m.rename(n, nn))
                 done += 1
                 
-                # 💾 MongoDB Auto Save Progress (Updates every 10 files to save DB bandwidth)
+                # MongoDB Auto Resume Update (Batching DB writes for speed)
                 if db is not None and done % 10 == 0:
                     await db.resume_progress.update_one({"uid": uid}, {"$set": {"done": done, "total": total_valid}}, upsert=True)
                     
             except Exception as e:
-                logger.error(f"Rename failed: {e}")
+                logger.error(f"Rename failed for a file: {e}")
                 failed += 1
             
-            # 🛡️ Safe Jitter Delay
-            await asyncio.sleep(random.uniform(0.3, 0.7))
+            # Anti-ban human delay
+            await asyncio.sleep(random.uniform(0.4, 0.9))
             
-            # MTProto Telegram Anti-ban (5 seconds Throttling)
+            # Telegram UI Update (5s Throttling)
             current_time = time.time()
             if (current_time - last_update_time >= 5.0) or (done + failed) == total_valid:
                 percent = int(((done + failed) / total_valid) * 100) if total_valid > 0 else 100
                 bar_filled = percent // 5
-                bar = "█" * bar_filled + "░" * (20 - bar_filled)
+                bar = "▰" * bar_filled + "▱" * (20 - bar_filled)
                 try:
                     await status_msg.edit_text(
-                        f"🚀 *Renaming (Safe Mode)...*\n\n"
-                        f"`{bar}` {percent}%\n\n"
-                        f"📊 Total Targets: `{total_valid:,}`\n"
-                        f"✅ Done: `{done:,}`\n"
-                        f"❌ Failed: `{failed:,}`"
+                        f"🚀 <b>Renaming in Progress...</b>\n\n"
+                        f"<blockquote><b>Progress:</b> <code>{percent}%</code>\n"
+                        f"<code>{bar}</code>\n\n"
+                        f"<b>✅ Completed:</b> <code>{done:,}</code>\n"
+                        f"<b>❌ Failed:</b> <code>{failed:,}</code>\n"
+                        f"<b>🎯 Total Targets:</b> <code>{total_valid:,}</code></blockquote>",
+                        parse_mode=enums.ParseMode.HTML
                     )
                     last_update_time = time.time()
                 except FloodWait as e:
@@ -429,14 +446,15 @@ async def do_bulk_rename(message, uid: int):
         else:
             if not rename_jobs.get(uid, {}).get("cancelled"):
                 await status_msg.edit_text(
-                    f"🎉 *Rename সম্পন্ন!*\n\n"
-                    f"📊 Total Targets: `{total:,}`\n"
-                    f"✅ Successfully Renamed: `{done:,}`\n"
-                    f"❌ Failed: `{failed:,}`"
+                    f"🎉 <b>Process Completely Done!</b>\n\n"
+                    f"<blockquote><b>📊 Total Scanned:</b> <code>{total:,}</code>\n"
+                    f"<b>✅ Successfully Renamed:</b> <code>{done:,}</code>\n"
+                    f"<b>❌ Errors Encountered:</b> <code>{failed:,}</code></blockquote>",
+                    parse_mode=enums.ParseMode.HTML
                 )
 
     except Exception as e:
-        await message.reply_text(f"❌ Critical Error: `{e}`")
+        await message.reply_text(f"❌ <b>Critical Error:</b> <code>{e}</code>", parse_mode=enums.ParseMode.HTML)
     finally:
         rename_jobs.pop(uid, None)
         if uid in user_states:
@@ -445,10 +463,10 @@ async def do_bulk_rename(message, uid: int):
              try:
                  await db.resume_progress.delete_one({"uid": uid}) 
              except Exception as e:
-                 logger.error(f"DB Error on complete: {e}")
+                 logger.error(f"DB Error on cleanup: {e}")
 
 
-# ─── HEALTH CHECK SERVER (Koyeb এর জন্য) ────────────────────────
+# ─── HEALTH CHECK SERVER (For Koyeb) ────────────────────────
 class HealthHandler(BaseHTTPRequestHandler):
     def do_GET(self):
         self.send_response(200)
@@ -460,16 +478,16 @@ class HealthHandler(BaseHTTPRequestHandler):
 def start_health_server():
     port = int(os.environ.get("PORT", 8000))
     server = HTTPServer(("0.0.0.0", port), HealthHandler)
-    logger.info(f"✅ Health check server on port {port}")
+    logger.info(f"✅ Health check server running on port {port}")
     server.serve_forever()
 
 
-# ─── MAIN ─────────────────────────────────────────────────────────
+# ─── MAIN APP START ─────────────────────────────────────────────────────────
 
 if __name__ == "__main__":
     if not BOT_TOKEN or not API_ID or not API_HASH:
-        print("❌ BOT_TOKEN, API_ID and API_HASH environment variables are required!")
+        print("❌ ERROR: BOT_TOKEN, API_ID, and API_HASH are strictly required in ENV variables!")
     else:
         threading.Thread(target=start_health_server, daemon=True).start()
-        logger.info("🤖 Mega Enterprise Bot (Kurigram Edition) চালু হচ্ছে...")
+        logger.info("🤖 Mega Enterprise Bot (Safe Mode + UI Advanced) starting now...")
         app.run()
