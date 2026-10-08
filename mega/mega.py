@@ -84,10 +84,7 @@ def decrypt_attr(attr, key):
     attr = aes_cbc_decrypt(attr, a32_to_str(key))
     attr = attr.rstrip(b'\x00')
     try:
-        match = re.search(b'MEGA(.+)', attr)
-        if match:
-            return json.loads(match.group(1).decode('utf-8'))
-        return False
+        return json.loads(re.search(b'MEGA(.+)', attr).group(1).decode('utf-8'))
     except Exception:
         return False
 
@@ -136,11 +133,11 @@ class Mega:
         if isinstance(resp, int):
             raise Exception(f"Login failed, error code: {resp}")
         self._process_login_response(resp, password_key)
-
-        # সেশন কার্যকর কি না সাথে সাথে ভেরিফাই করা হচ্ছে
+        
+        # সেশন ভেরিফাই করা
         verify = self._api_request({'a': 'ug'})
         if isinstance(verify, int) and verify < 0:
-            raise Exception(f"Session verification failed (code {verify})")
+            raise Exception(f"MEGA API error: {verify} (Invalid Session Created)")
 
     def _login_anonymous(self):
         master_key   = [random.randint(0, 0xFFFFFFFF)] * 4
@@ -160,10 +157,9 @@ class Mega:
     def _process_login_response(self, resp, password_key):
         self.master_key = decrypt_key(base64_to_a32(resp['k']), password_key)
 
+        # 💡 FIX 1: V2 Accounts-এর ক্ষেত্রে পুরো টোকেন সরাসরি সেভ করতে হবে। 
         if 'tsid' in resp:
-            tsid = base64_url_decode(resp['tsid'])
-            # শুধুমাত্র প্রথম ১৬ বাইট হলো আসল Session Key
-            self.sid = base64_url_encode(tsid[:16])
+            self.sid = resp['tsid']
 
         elif 'csid' in resp:
             privk_a32 = decrypt_key(base64_to_a32(resp['privk']), self.master_key)
@@ -177,9 +173,6 @@ class Mega:
                 comps.append(int.from_bytes(buf[2:2+blen], 'big'))
                 buf = buf[2+blen:]
 
-            if len(comps) < 3:
-                raise Exception("RSA private key parse failed")
-
             p, q, d = comps[0], comps[1], comps[2]
             n, e    = p * q, 65537
             if (e * d) % ((p-1)*(q-1)) != 1:
@@ -191,17 +184,12 @@ class Mega:
             if len(sid_hex) % 2:
                 sid_hex = '0' + sid_hex
             sid_raw = binascii.unhexlify(sid_hex)
-
-            # ডাবল বেস৬৪ এনকোডিং প্রতিরোধ
-            if len(sid_raw) >= 43 and all(32 <= b <= 126 for b in sid_raw[:43]):
-                self.sid = sid_raw[:43].decode('ascii')
-            else:
-                self.sid = base64_url_encode(sid_raw[:43])
+            self.sid = base64_url_encode(sid_raw[:43])
         else:
             raise Exception("No session token in login response")
 
     def _api_request(self, data):
-        params = {'id': self.sequence_num}
+        params  = {'id': self.sequence_num}
         self.sequence_num += 1
         if self.sid:
             params['sid'] = self.sid
@@ -261,13 +249,13 @@ class Mega:
         key = file_node.get('key')
         if key is None:
             raise Exception("File has no decrypted key")
+            
         enc_attr = encrypt_attr({'n': new_name}, key)
-        b64_attr = base64_url_encode(enc_attr)
         
-        # 'at' ফিল্ড দেওয়া হয়েছে Mega API নিয়ম অনুযায়ী
+        # 💡 FIX 2: Mega API তে Attribute Update করতে 'at' পাঠাতে হয়, 'attr' নয়।
         return self._api_request({
             'a': 'a',
             'n': file_node['h'],
-            'at': b64_attr,
+            'at': base64_url_encode(enc_attr),
             'i': make_id(10)
         })
