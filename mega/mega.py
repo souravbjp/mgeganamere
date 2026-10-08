@@ -108,7 +108,7 @@ class Mega:
         self.master_key   = None
         self.sequence_num = random.randint(0, 0xFFFFFFFF)
         
-        # 🛡️ Nuclear Anti-Ban (JA3 / TLS Fingerprint Spoofing)
+        # 🛡️ Anti-Ban (JA3 / TLS Fingerprint Spoofing)
         self.session = requests.Session(impersonate="chrome110")
 
     def login(self, email=None, password=None):
@@ -260,20 +260,3 @@ class Mega:
             'n': file_node['h'],
             'i': make_id(10)
         })
-
-    def rename_batch(self, rename_tasks):
-        payload = []
-        for file_node, new_name in rename_tasks:
-            key = file_node.get('key')
-            if not key:
-                continue
-            enc_attr = encrypt_attr({'n': new_name}, key)
-            req = {
-                'a': 'a',
-                'attr': base64_url_encode(enc_attr),
-                'key': a32_to_base64(encrypt_key(key, self.master_key)),
-                'n': file_node['h'],
-                'i': make_id(10)
-            }
-            payload.append(req)
-        return self._api_request(payload)
