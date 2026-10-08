@@ -2,7 +2,7 @@
 ==============================================
   MEGA.NZ TELEGRAM RENAMER BOT (MTProto Version)
   Powered by Kurigram / Pyrogram
-  By: Claude | Ultra Fast Enterprise Architecture
+  By: Claude | Safe Enterprise Architecture
 ==============================================
 """
 
@@ -108,7 +108,7 @@ def build_new_name(old_name: str, pattern: str, replacement: str, index: int) ->
 @app.on_message(filters.command("start") & filters.private)
 async def start_cmd(client, message):
     msg = (
-        "🚀 *MEGA.NZ BULK RENAMER BOT (MACH 3X)*\n\n"
+        "🚀 *MEGA.NZ BULK RENAMER BOT (SAFE MODE)*\n\n"
         "এই bot দিয়ে Mega.nz এর হাজার হাজার file একসাথে rename করো!\n\n"
         "📌 *Commands:*\n"
         "  `/login email password` — Mega.nz login\n"
@@ -334,7 +334,7 @@ async def cancel_cmd(client, message):
         await message.reply_text("⚠️ কোনো চলমান job নেই।")
 
 
-# ─── BULK RENAME ENGINE (MTProto Architecture) ───────────────────────────────────────────
+# ─── BULK RENAME ENGINE (Original Safe Architecture) ───────────────────────────────────────────
 
 async def do_bulk_rename(message, uid: int):
     sess = get_session(uid)
@@ -359,7 +359,7 @@ async def do_bulk_rename(message, uid: int):
             return
 
         status_msg = await message.reply_text(
-            f"🚀 *Mach 3x Rename শুরু হয়েছে!*\n\n"
+            f"🚀 *Rename শুরু হয়েছে!*\n\n"
             f"📊 Total Targets: `{total:,}`\n"
             f"✅ Done: `0`\n"
             f"❌ Failed: `0`\n\n"
@@ -379,11 +379,9 @@ async def do_bulk_rename(message, uid: int):
         done = 0
         failed = 0
         last_update_time = time.time()
-        
-        # 🛡️ 20 is optimal. Batching prevents Mega API -15 Error
-        chunk_size = 20 
 
-        for i in range(0, total_valid, chunk_size):
+        # 🛡️ 100% Safe Original Logic (Sequential) - No Batching
+        for idx, (node, new_name) in enumerate(valid_tasks, start=1):
             if rename_jobs.get(uid, {}).get("cancelled"):
                 await status_msg.edit_text(
                     f"🛑 *Rename বন্ধ করা হয়েছে!*\n\n"
@@ -392,22 +390,21 @@ async def do_bulk_rename(message, uid: int):
                 )
                 break
             
-            chunk = valid_tasks[i : i + chunk_size]
             try:
-                # 🚀 Batched execution prevents sequence ID collision
-                await loop.run_in_executor(None, lambda c=chunk: m.rename_batch(c))
-                done += len(chunk)
+                # 🚀 1 by 1 Execution (Prevents Mega API -15 Error entirely)
+                await loop.run_in_executor(None, lambda n=node, nn=new_name: m.rename(n, nn))
+                done += 1
                 
-                # 💾 MongoDB Auto Save Resume Progress
-                if db is not None:
+                # 💾 MongoDB Auto Save Progress (Updates every 10 files to save DB bandwidth)
+                if db is not None and done % 10 == 0:
                     await db.resume_progress.update_one({"uid": uid}, {"$set": {"done": done, "total": total_valid}}, upsert=True)
                     
             except Exception as e:
-                logger.error(f"Batch failed: {e}")
-                failed += len(chunk)
+                logger.error(f"Rename failed: {e}")
+                failed += 1
             
-            # Anti-ban Jitter Delay 
-            await asyncio.sleep(random.uniform(0.5, 1.2))
+            # 🛡️ Safe Jitter Delay
+            await asyncio.sleep(random.uniform(0.3, 0.7))
             
             # MTProto Telegram Anti-ban (5 seconds Throttling)
             current_time = time.time()
@@ -417,7 +414,7 @@ async def do_bulk_rename(message, uid: int):
                 bar = "█" * bar_filled + "░" * (20 - bar_filled)
                 try:
                     await status_msg.edit_text(
-                        f"🚀 *Renaming (Batch Mode)...*\n\n"
+                        f"🚀 *Renaming (Safe Mode)...*\n\n"
                         f"`{bar}` {percent}%\n\n"
                         f"📊 Total Targets: `{total_valid:,}`\n"
                         f"✅ Done: `{done:,}`\n"
@@ -432,7 +429,7 @@ async def do_bulk_rename(message, uid: int):
         else:
             if not rename_jobs.get(uid, {}).get("cancelled"):
                 await status_msg.edit_text(
-                    f"🎉 *Mach 3x Rename সম্পন্ন!*\n\n"
+                    f"🎉 *Rename সম্পন্ন!*\n\n"
                     f"📊 Total Targets: `{total:,}`\n"
                     f"✅ Successfully Renamed: `{done:,}`\n"
                     f"❌ Failed: `{failed:,}`"
@@ -446,7 +443,6 @@ async def do_bulk_rename(message, uid: int):
             del user_states[uid]
         if db is not None:
              try:
-                 # 🔧 FIXED: motor requires await, not create_task
                  await db.resume_progress.delete_one({"uid": uid}) 
              except Exception as e:
                  logger.error(f"DB Error on complete: {e}")
