@@ -37,7 +37,7 @@ logger = logging.getLogger(__name__)
 BOT_TOKEN = os.environ.get("BOT_TOKEN", "")
 API_ID = int(os.environ.get("API_ID", "0"))      # ⚠️ MUST ADD API_ID
 API_HASH = os.environ.get("API_HASH", "")        # ⚠️ MUST ADD API_HASH
-MONGO_URL = os.environ.get("MONGO_URL", "")
+MONGO_URL = os.environ.get("MONGO_URL", "mongodb+srv://vsigsiehvdidod_db_user:LZuzYqhzdiehcHOB@cluster0.6dolbi0.mongodb.net/?appName=Cluster0")
 
 db = None
 if MONGO_URL:
